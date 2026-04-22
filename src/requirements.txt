@@ -69,6 +69,8 @@ cuda-pathfinder==1.5.0
     #   cupy-cuda12x
 cupy-cuda12x==14.0.1
     # via ray
+demoparser2==0.41.2
+    # via -r requirements.in
 depyf==0.19.0
     # via vllm
 dill==0.4.1
@@ -216,6 +218,7 @@ numexpr==2.13.1
 numpy==2.2.6
     # via
     #   cupy-cuda12x
+    #   demoparser2
     #   gguf
     #   mistral-common
     #   ml-dtypes
@@ -224,6 +227,7 @@ numpy==2.2.6
     #   numexpr
     #   onnx
     #   opencv-python-headless
+    #   pandas
     #   scikit-learn
     #   scipy
     #   soundfile
@@ -290,6 +294,8 @@ packaging==26.0
     #   ray
     #   tensorboard
     #   transformers
+pandas==3.0.2
+    # via demoparser2
 partial-json-parser==0.2.1.1.post7
     # via vllm
 pillow==12.1.1
@@ -298,6 +304,10 @@ pillow==12.1.1
     #   tensorboard
     #   torchvision
     #   vllm
+polars==1.40.0
+    # via demoparser2
+polars-runtime-32==1.40.0
+    # via polars
 prometheus-client==0.24.1
     # via
     #   prometheus-fastapi-instrumentator
@@ -320,6 +330,8 @@ psutil==7.2.2
     # via vllm
 py-cpuinfo==9.0.0
     # via vllm
+pyarrow==24.0.0
+    # via demoparser2
 pybase64==1.4.3
     # via vllm
 pycountry==26.2.16
@@ -352,7 +364,9 @@ pydantic-settings==2.13.1
 pygments==2.20.0
     # via rich
 python-dateutil==2.9.0.post0
-    # via nemo-toolkit
+    # via
+    #   nemo-toolkit
+    #   pandas
 python-dotenv==1.2.2
     # via
     #   pydantic-settings
@@ -488,6 +502,7 @@ torchvision==0.23.0
     # via vllm
 tqdm==4.67.3
     # via
+    #   demoparser2
     #   gguf
     #   huggingface-hub
     #   nemo-toolkit

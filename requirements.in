@@ -8,3 +8,5 @@ gevent
 flashtext
 asyncpg
 asyncio
+demoparser2
+numpy<2.3
