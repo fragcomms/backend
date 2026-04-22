@@ -7,7 +7,7 @@ import subprocess
 def extract_webm(mka_path):
   if not os.path.exists(mka_path):
     print(
-      f'DATA_OUTPUT:{{"type": "error", "payload": {{"message": "MKA file not found"}}}}',
+      'DATA_OUTPUT:{"type": "error", "payload": {"message": "MKA file not found"}}',
       flush=True,
     )
     sys.exit(1)
