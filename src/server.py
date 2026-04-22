@@ -201,6 +201,7 @@ async def handle_subprocess_event(event: dict, task_name: str):
       watcher = TASK_CONTEXT[job_id]
       watcher["demo_id"] = demo_id
 
+      watcher["warmup_ticks"] = payload.get("warmup_ticks", 0)
       map_name = payload.get("map", "unknown_map")
       base_prompt = watcher.get("base_prompt")
 
@@ -391,6 +392,17 @@ async def check_replay_watcher(job_id: str):
           demo_record["length_ticks"] / 64
         ) * 1000  # convert 64 tick/s timeline to milliseconds
         demo_end_ms = demo_start_ms + demo_duration_ms
+
+        MANUAL_OFFSET_MS = 7000
+
+        warmup_ticks = watcher.get("warmup_ticks", 0)
+        warmup_offset_ms = (warmup_ticks / 64) * 1000 if warmup_ticks > 0 else 0
+
+        adjusted_demo_start_ms = demo_start_ms + MANUAL_OFFSET_MS + warmup_offset_ms
+
+        logger.info(
+          f"Base: {demo_start_ms} | Flat: {MANUAL_OFFSET_MS} | Dynamic: {warmup_offset_ms} | Adjusted: {adjusted_demo_start_ms}"
+        )
 
         audio_starts_first = False
 
