@@ -23,6 +23,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TRANSCRIPT_SCRIPT = os.path.join(BASE_DIR, "transcription", "transcriber-para.py")
 PARSER_SCRIPT = os.path.join(BASE_DIR, "dem_parser", "parser.py")
 DOWNLOADER_SCRIPT = os.path.join(BASE_DIR, "steam_demo_downloader", "demodownloader.py")
+WEBM_SCRIPT = os.path.join(BASE_DIR, "webm_extractor", "webm.py")
 DB_CONFIG = {
   "host": os.getenv("PG_HOST"),
   "port": os.getenv("PG_PORT"),
@@ -239,6 +240,14 @@ async def handle_subprocess_event(event: dict, task_name: str):
     if job_id and job_id in TASK_CONTEXT:
       TASK_CONTEXT[job_id]["transcript_done"] = True
       await check_replay_watcher(job_id)
+
+  elif event_type == "webm_extraction_complete":
+    context = TASK_CONTEXT.pop(task_name, {})
+    mka_path = payload.get("mka_path")
+    tracks = payload.get("extracted_tracks", [])
+    logger.info(
+      f"WebM extraction complete for ${os.path.basename(mka_path)}. Extracted {len(tracks)} tracks."
+    )
 
 
 async def listen_to_process(process, task_name):
@@ -584,12 +593,17 @@ async def create_replay(req: CreateReplayRequest):
     "base_prompt": req.prompt,
   }
 
+  webm_task_name = f"WebM_Extract_{req.audio_id}"
+  TASK_CONTEXT[webm_task_name] = {"audio_id": req.audio_id}
+  webm_cmd = [sys.executable, WEBM_SCRIPT, record["file_path"]]
+  await launch_subprocess(webm_cmd, webm_task_name)
+
   await send_via_pipe(req.match_code)
 
   return {
     "status": "processing",
     "job_id": job_id,
-    "message": "Pipeline initialized: downloader started",
+    "message": "Pipeline initialized: downloader and webm extractor started",
   }
 
 
@@ -617,6 +631,13 @@ async def get_transcript(filepath: str):
       status_code=404, detail="Transcript file not found on remote server"
     )
   return FileResponse(filepath, media_type="text/plain")
+
+
+@app.get("/get_webm")
+async def get_webm(filepath: str):
+  if not os.path.exists(filepath):
+    raise HTTPException(status_code=404, detail="WebM file not found on remote server")
+  return FileResponse(filepath, media_type="audio/webm")
 
 
 @app.get("/health")
