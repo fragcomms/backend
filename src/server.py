@@ -7,7 +7,7 @@ import logging
 import json
 import asyncio
 import asyncpg
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
 from fastapi import FastAPI, HTTPException
 from contextlib import asynccontextmanager
 from pydantic import BaseModel
@@ -33,6 +33,7 @@ DB_CONFIG = {
 }
 
 TASK_CONTEXT: Dict[str, dict] = {}
+JOB_STATUS: Dict[str, Dict[str, Any]] = {}
 # decided storing fragmented data from downloader here
 # so that way there can only be one query for each parsed demo
 downloader_process: Optional[subprocess.Popen] = None
@@ -427,8 +428,9 @@ async def check_replay_watcher(job_id: str):
         main_insert = """
         INSERT INTO replays (demo_id, audio_id, name, audio_offset, audio_starts_first)
         VALUES ($1, $2, $3, $4, $5)
+        RETURNING replay_id
         """
-        await conn.execute(
+        replay_id = await conn.fetchval(
           main_insert,
           watcher["demo_id"],
           watcher["audio_id"],
@@ -437,6 +439,14 @@ async def check_replay_watcher(job_id: str):
           audio_starts_first,
         )
       logger.info(f"Successfully created replay: {watcher['replay_name']}")
+
+      JOB_STATUS[job_id] = {
+        "job_id": job_id,
+        "status": "completed",
+        "replay_id": replay_id,
+        "audio_id": watcher["audio_id"],
+        "match_code": watcher["match_code"],
+      }
 
       del TASK_CONTEXT[job_id]
     except Exception as e:
@@ -448,6 +458,14 @@ async def check_replay_watcher(job_id: str):
 def abort_job(job_id: str, reason: str):
   if job_id and job_id in TASK_CONTEXT:
     logger.error(f"Aborting job '{job_id}: {reason}")
+    context = TASK_CONTEXT[job_id]
+    JOB_STATUS[job_id] = {
+      "job_id": job_id,
+      "status": "failed",
+      "reason": reason,
+      "audio_id": context.get("audio_id"),
+      "match_code": context.get("match_code"),
+    }
     del TASK_CONTEXT[job_id]
 
 
@@ -605,6 +623,13 @@ async def create_replay(req: CreateReplayRequest):
     "base_prompt": req.prompt,
   }
 
+  JOB_STATUS[job_id] = {
+    "job_id": job_id,
+    "status": "processing",
+    "audio_id": req.audio_id,
+    "match_code": req.match_code,
+  }
+
   webm_task_name = f"WebM_Extract_{req.audio_id}"
   TASK_CONTEXT[webm_task_name] = {"audio_id": req.audio_id}
   webm_cmd = [sys.executable, WEBM_SCRIPT, record["file_path"]]
@@ -617,6 +642,30 @@ async def create_replay(req: CreateReplayRequest):
     "job_id": job_id,
     "message": "Pipeline initialized: downloader and webm extractor started",
   }
+
+
+@app.get("/job_status/{job_id}")
+async def get_job_status(job_id: str):
+  status_record = JOB_STATUS.get(job_id)
+
+  if status_record and status_record.get("status") in {"completed", "failed"}:
+    return status_record
+
+  watcher = TASK_CONTEXT.get(job_id)
+  if watcher and watcher.get("is_watcher"):
+    return {
+      "job_id": job_id,
+      "status": "processing",
+      "audio_id": watcher.get("audio_id"),
+      "match_code": watcher.get("match_code"),
+      "demo_ready": watcher.get("demo_id") is not None,
+      "transcript_done": bool(watcher.get("transcript_done")),
+    }
+
+  if status_record:
+    return status_record
+
+  raise HTTPException(status_code=404, detail="Job not found")
 
 
 # it needs to have .json prefixed already
