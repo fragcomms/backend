@@ -61,7 +61,7 @@ def extract_webm(mka_path):
         "-c:a",
         "libopus",
         "-b:a",
-        "20k",
+        "24k",
         "-f",
         "webm",
         out_filepath,
