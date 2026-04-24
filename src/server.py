@@ -1,4 +1,4 @@
-from datetime import datetime  # ????????????
+from datetime import datetime, timezone  # ????????????
 import os
 import subprocess
 import time
@@ -374,53 +374,65 @@ async def check_replay_watcher(job_id: str):
         if not audio_record or not demo_record:
           raise Exception("Missing audio or demo records for offset calculation")
 
-        audio_start = audio_record["creation_time"]
+        db_audio_time = audio_record["creation_time"]
         latency_ms = audio_record.get(
           "latency_ms", 0
         )  # fallback to 0 if recording ended too fast
-        demo_start = demo_record["fetch_time"]
+        db_fetch_time = demo_record["fetch_time"]
 
-        from datetime import timezone
+        if db_audio_time.tzinfo is None:
+          db_audio_time = db_audio_time.replace(tzinfo=timezone.utc)
+        if db_fetch_time.tzinfo is None:
+          db_fetch_time = db_fetch_time.replace(tzinfo=timezone.utc)
 
-        if audio_start.tzinfo is None:
-          audio_start = audio_start.replace(tzinfo=timezone.utc)
-        if demo_start.tzinfo is None:
-          demo_start = demo_start.replace(tzinfo=timezone.utc)
+        audio_start_ms = (db_audio_time.timestamp() * 1000) - latency_ms
 
-        audio_start_ms = (audio_start.timestamp() * 1000) - latency_ms
-        demo_start_ms = demo_start.timestamp() * 1000
-        demo_duration_ms = (
-          demo_record["length_ticks"] / 64
-        ) * 1000  # convert 64 tick/s timeline to milliseconds
-        demo_end_ms = demo_start_ms + demo_duration_ms
+        UPLOAD_DELAY_MS = 0
+        match_end_ms = db_fetch_time.timestamp() * 1000 - UPLOAD_DELAY_MS
 
-        MANUAL_OFFSET_MS = 7000
+        demo_duration_ms = (demo_record["length_ticks"] / 64) * 1000
+        demo_start_ms = match_end_ms - demo_duration_ms
 
-        warmup_ticks = watcher.get("warmup_ticks", 0)
-        warmup_offset_ms = (warmup_ticks / 64) * 1000 if warmup_ticks > 0 else 0
-
-        adjusted_demo_start_ms = demo_start_ms + MANUAL_OFFSET_MS + warmup_offset_ms
+        MANUAL_OFFSET_MS = 0
+        adjusted_start_ms = demo_start_ms + MANUAL_OFFSET_MS
 
         logger.info(
-          f"Base: {demo_start_ms} | Flat: {MANUAL_OFFSET_MS} | Dynamic: {warmup_offset_ms} | Adjusted: {adjusted_demo_start_ms}"
+          f"Match End: {match_end_ms} | Duration: {demo_duration_ms} | Adjusted Start (Tick 0): {adjusted_start_ms}"
         )
+
+        # demo_start_ms = demo_start.timestamp() * 1000
+        # demo_duration_ms = (
+        #   demo_record["length_ticks"] / 64
+        # ) * 1000  # convert 64 tick/s timeline to milliseconds
+        # demo_end_ms = demo_start_ms + demo_duration_ms
+
+        # MANUAL_OFFSET_MS = 0
+
+        # warmup_ticks = watcher.get("warmup_ticks", 0)
+        # warmup_offset_ms = (warmup_ticks / 64) * 1000 if warmup_ticks > 0 else 0
+
+        # adjusted_demo_start_ms = demo_start_ms + MANUAL_OFFSET_MS + warmup_offset_ms
+
+        # logger.info(
+        #   f"Base: {demo_start_ms} | Flat: {MANUAL_OFFSET_MS} | Dynamic: {warmup_offset_ms} | Adjusted: {adjusted_demo_start_ms}"
+        # )
 
         audio_starts_first = False
 
-        if audio_start_ms < demo_start_ms:
+        if audio_start_ms < adjusted_start_ms:
           # audio is before demo
-          audio_offset = int(round(demo_start_ms - audio_start_ms))
+          audio_offset = int(round(adjusted_start_ms - audio_start_ms))
           audio_starts_first = True
           logger.info(f"Audio started BEFORE demo. Offset: {audio_offset}ms")
-        elif demo_start_ms <= audio_start_ms <= demo_end_ms:
+        elif adjusted_start_ms <= audio_start_ms <= match_end_ms:
           # audio is during demo
-          audio_offset = int(round(audio_start_ms - demo_start_ms))
+          audio_offset = int(round(audio_start_ms - adjusted_start_ms))
           audio_starts_first = False
           logger.info(f"Audio started DURING demo. Offset: {audio_offset}ms")
         else:
           # audio is after demo
           logger.warning(
-            f"[WARNING] Audio for {job_id} started AFTER the match ended! Audio: {audio_start_ms}, Demo End: {demo_end_ms}"
+            f"[WARNING] Audio for {job_id} started AFTER the match ended! Audio: {audio_start_ms}, Match End: {match_end_ms}"
           )
           audio_offset = -1
           audio_starts_first = False
