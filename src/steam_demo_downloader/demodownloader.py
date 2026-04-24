@@ -208,7 +208,7 @@ class CS2DemoDownloader:
             match_time_iso = match_end_dt.isoformat()
             logging.info(f"Header time found: {match_time_iso}")
 
-          except Exception as e:
+          except Exception:
             logging.warning(f"Failed to parse x-goog-custom-time ({custom_time_str})")
 
         elif last_modified_str:
