@@ -387,7 +387,7 @@ async def check_replay_watcher(job_id: str):
 
         audio_start_ms = (db_audio_time.timestamp() * 1000) - latency_ms
 
-        UPLOAD_DELAY_MS = 0
+        UPLOAD_DELAY_MS = 20000
         match_end_ms = db_fetch_time.timestamp() * 1000 - UPLOAD_DELAY_MS
 
         demo_duration_ms = (demo_record["length_ticks"] / 64) * 1000
