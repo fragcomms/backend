@@ -13,7 +13,8 @@ import json
 from gevent.queue import Queue
 from gevent.event import AsyncResult
 from dotenv import load_dotenv
-from datetime import timezone, datetime
+from datetime import timezone, datetime, timedelta
+from email.utils import parsedate_to_datetime
 
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = (
   "python"  # required for protobuf compilation
@@ -194,6 +195,33 @@ class CS2DemoDownloader:
       # downloading file
       with requests.get(url, stream=True) as r:
         r.raise_for_status()
+        custom_time_str = r.headers.get("x-goog-custom-time")
+        last_modified_str = r.headers.get("Last-Modified")
+        if custom_time_str:
+          try:
+            if custom_time_str.endswith("Z"):
+              custom_time_str = custom_time_str[:-1] + "+00:00"
+
+            future_dt = datetime.fromisoformat(custom_time_str)
+            match_end_dt = future_dt - timedelta(days=30)
+
+            match_time_iso = match_end_dt.isoformat()
+            logging.info(f"Header time found: {match_time_iso}")
+
+          except Exception as e:
+            logging.warning(f"Failed to parse x-goog-custom-time ({custom_time_str})")
+
+        elif last_modified_str:
+          try:
+            last_modified_dt = parsedate_to_datetime(last_modified_str)
+            match_time_iso = last_modified_dt.isoformat()
+            logging.info(f"Using fallback Last-Modified time: {match_time_iso}")
+          except Exception as e:
+            logging.warning(f"Failed to parse Last-Modified ({last_modified_str}): {e}")
+
+        else:
+          logging.info("Header x-goog-custom-time is missing, falling back to GC time.")
+
         with open(bz2_filepath, "wb") as f:
           for chunk in r.iter_content(chunk_size=8192):
             f.write(chunk)
