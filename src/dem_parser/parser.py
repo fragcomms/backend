@@ -169,7 +169,8 @@ def parse_game_events(parser, match_start_tick, steamid_map):
     # money and active weapon
     print("Parsing economy and weapon events...")
     df_state = parser.parse_ticks(
-      ["player_steamid", "balance", "current_equip_value", "active_weapon_name"]
+      # ["player_steamid", "balance", "current_equip_value", "active_weapon_name"]
+      ["player_steamid", "balance", "active_weapon_name"]
     )
 
     if not df_state.empty:
@@ -186,17 +187,15 @@ def parse_game_events(parser, match_start_tick, steamid_map):
         df_state["active_weapon_name"].fillna("").astype(str)
       )
       df_state["balance"] = df_state["balance"].fillna(0).astype(int)
-      df_state["current_equip_value"] = (
-        df_state["current_equip_value"].fillna(0).astype(int)
-      )
+      # df_state["current_equip_value"] = (
+      #   df_state["current_equip_value"].fillna(0).astype(int)
+      # )
 
       df_state["prev_bal"] = df_state.groupby("id")["balance"].shift(1)
-      df_state["prev_eq"] = df_state.groupby("id")["current_equip_value"].shift(1)
+      # df_state["prev_eq"] = df_state.groupby("id")["current_equip_value"].shift(1)
       df_state["prev_wep"] = df_state.groupby("id")["active_weapon_name"].shift(1)
 
-      bal_mask = (df_state["balance"] != df_state["prev_bal"]) | (
-        df_state["current_equip_value"] != df_state["prev_eq"]
-      )
+      bal_mask = df_state["balance"] != df_state["prev_bal"]
       bal_changes = df_state[bal_mask]
 
       # money changes
@@ -207,7 +206,7 @@ def parse_game_events(parser, match_start_tick, steamid_map):
             "t": int(row["tick"]),
             "id": int(row["id"]),
             "bal": int(row["balance"]),
-            "eq": int(row["current_equip_value"]),
+            # "eq": int(row["current_equip_value"]),
           }
         )
       processed_events["balance_changes"] = bal_list
