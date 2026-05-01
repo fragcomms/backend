@@ -166,6 +166,59 @@ def parse_game_events(parser, match_start_tick, steamid_map):
 
     processed_events[event_name] = df.to_dict(orient="records")
 
+    print("Parsing economy and weapon events...")
+    df_state = parser.parse_ticks(
+      ["player_steamid", "balance", "current_equip_value", "active_weapon_name"]
+    )
+
+    if not df_state.empty:
+      df_state = df_state[(df_state["tick"] >= match_start_tick)].copy()
+      df_state["sid"] = df_state["player_steamid"].apply(
+        lambda x: steamid_map.get(str(x).split(".")[0]) if pd.notnull(x) else None
+      )
+      df_state = df_state.dropna(subset=["sid"])
+      df_state["sid"] = df_state["sid"].astype(int)
+      df_state = df_state.sort_values(by=["sid", "tick"])
+
+      df_state["prev_bal"] = df_state.groupby("sid")["balance"].shift(1)
+      df_state["prev_eq"] = df_state.groupby("sid")["current_equip_value"].shift(1)
+      df_state["prev_wep"] = df_state.groupby("sid")["active_weapon_name"].shift(1)
+
+      bal_mask = (df_state["balance"] != df_state["prev_bal"]) | (
+        df_state["current_equip_value"] != df_state["prev_eq"]
+      )
+      bal_changes = df_state[bal_mask]
+
+      bal_list = []
+      for _, row in bal_changes.iterrows():
+        bal_list.append(
+          {
+            "t": int(row["tick"]),
+            "sid": int(row["sid"]),
+            "bal": int(row["balance"]) if pd.notnull(row["balance"]) else 0,
+            "eq": int(row["current_equip_value"])
+            if pd.notnull(row["current_equip_value"])
+            else 0,
+          }
+        )
+      processed_events["balance_changes"] = bal_list
+
+      wep_mask = df_state["active_weapon_name"] != df_state["prev_wep"]
+      wep_changes = df_state[wep_mask]
+
+      wep_list = []
+      for _, row in wep_changes.iterrows():
+        wep_list.append(
+          {
+            "t": int(row["tick"]),
+            "sid": int(row["sid"]),
+            "wep": str(row["active_weapon_name"])
+            if pd.notnull(row["active_weapon_name"])
+            else "",
+          }
+        )
+      processed_events["weapon_changes"] = wep_list
+
   return processed_events
 
 
